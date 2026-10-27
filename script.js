@@ -2,6 +2,38 @@ const chatWindow = document.getElementById('chat-window');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const themeToggle = document.getElementById('theme-toggle');
+const STORAGE_KEY = 'chatHistory';
+const chatHistory = [];
+
+// Restore saved messages when the page is ready
+function loadChatHistory() {
+  try {
+    const savedMessages = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    if (!Array.isArray(savedMessages)) return;
+
+    savedMessages.forEach((message) => {
+      if (
+        message &&
+        typeof message.text === 'string' &&
+        ['user', 'ai', 'error'].includes(message.senderClass)
+      ) {
+        appendMessage(message.text, message.senderClass, false);
+        chatHistory.push({
+          text: message.text,
+          senderClass: message.senderClass,
+        });
+      }
+    });
+  } catch (error) {
+    console.error('Unable to load saved chat history:', error);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadChatHistory);
+} else {
+  loadChatHistory();
+}
 
 // Toggle the dark theme when the user clicks the theme button
 themeToggle.addEventListener('click', () => {
@@ -19,16 +51,16 @@ async function sendMessage() {
   const text = userInput.value.trim();
   if (!text) return;
 
-  // 1. Render User Message & clear input
+  // Render the user's message and clear the input
   appendMessage(text, 'user');
   userInput.value = '';
 
-  // 2. Disable controls while waiting for backend
+  // Disable controls while waiting for backend
   toggleInputState(true);
   showTypingIndicator();
 
   try {
-    // 3. Call Plain Java Backend endpoint
+    // Call the Java backend
     const response = await fetch('http://localhost:8080/chat', {
       method: 'POST',
       headers: {
@@ -44,7 +76,7 @@ async function sendMessage() {
     const data = await response.json();
     removeTypingIndicator();
 
-    // 4. Render AI Reply
+    // Render the AI reply
     appendMessage(data.reply || 'No response received.', 'ai');
 
   } catch (error) {
@@ -57,15 +89,22 @@ async function sendMessage() {
   }
 }
 
-function appendMessage(text, senderClass) {
+function appendMessage(text, senderClass, save = true) {
   const messageElement = document.createElement('div');
   messageElement.classList.add('message', senderClass);
   messageElement.textContent = text;
 
   chatWindow.appendChild(messageElement);
-
-  // Auto-scroll to the bottom
   chatWindow.scrollTop = chatWindow.scrollHeight;
+
+  if (save) {
+    chatHistory.push({ text, senderClass });
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(chatHistory));
+    } catch (error) {
+      console.error('Unable to save chat history:', error);
+    }
+  }
 }
 
 function toggleInputState(isDisabled) {
@@ -73,7 +112,6 @@ function toggleInputState(isDisabled) {
   sendBtn.disabled = isDisabled;
 }
 
-/*added function*/
 function showTypingIndicator() {
   const indicator = document.createElement('div');
   indicator.className = 'message typing-indicator';
